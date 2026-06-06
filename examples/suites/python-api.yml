@@ -1,0 +1,26 @@
+name: python-api
+description: >-
+  Simulated evaluation suite for a Python REST API coding skill. Compares a
+  baseline implementation (v1) against an iterated candidate (v2) that adds
+  input validation and a small response cache. All traces in this suite are
+  fabricated for the MVP and clearly labelled "simulated"; the suite exists to
+  exercise the TraceCaliper pipeline end-to-end.
+weights:
+  tests_passed: 0.25
+  task_completion: 0.25
+  security: 0.20
+  over_editing: 0.10
+  repo_conventions: 0.08
+  instruction_following: 0.07
+  reviewability: 0.05
+skills:
+  - id: python-api-v1
+    path: examples/skills/skill-v1.md
+    description: >-
+      Baseline Python API skill. Implements the endpoint but tends to sprawl
+      across the codebase and stops short of a working test run.
+  - id: python-api-v2
+    path: examples/skills/skill-v2.md
+    description: >-
+      Iterated Python API skill. Adds Pydantic input validation and an
+      in-memory response cache; focused edits and a green test suite.

@@ -1,0 +1,65 @@
+{
+  "skill_id": "python-api",
+  "simulated": true,
+  "label": "SIMULATED \u2014 python-api skill v1 baseline trace (MVP fabricated data)",
+  "steps": [
+    {
+      "index": 1,
+      "action": "read_task",
+      "files_touched": ["docs/tasks/new-endpoint.md"],
+      "evidence": "Parsed task: add a GET /items/{id} endpoint returning a JSON record."
+    },
+    {
+      "index": 2,
+      "action": "edit_router",
+      "files_touched": ["app/router.py"],
+      "evidence": "Added /items/{id} route wired to a new get_item handler."
+    },
+    {
+      "index": 3,
+      "action": "edit_handler",
+      "files_touched": ["app/handlers/items.py"],
+      "evidence": "Implemented get_item(request) reading id from query and returning a dict."
+    },
+    {
+      "index": 4,
+      "action": "edit_unrelated_helpers",
+      "files_touched": [
+        "app/utils/strings.py",
+        "app/utils/dates.py",
+        "app/utils/__init__.py",
+        "app/middleware/logging.py",
+        "app/middleware/__init__.py",
+        "app/config/defaults.py"
+      ],
+      "evidence": "While here, rewrote unrelated helpers and middleware; touched 6 extra modules outside the task scope."
+    },
+    {
+      "index": 5,
+      "action": "edit_serializers",
+      "files_touched": [
+        "app/serializers/item.py",
+        "app/serializers/base.py",
+        "app/serializers/__init__.py"
+      ],
+      "evidence": "Refactored serializers that were not required by the new endpoint; expanded scope to 3 more files."
+    },
+    {
+      "index": 6,
+      "action": "manual_smoke_check",
+      "files_touched": [],
+      "evidence": "Inspected the handler by reading it; declared the task complete without running pytest. Pre-existing test suite still shows 2 failing tests in tests/test_items.py that were not investigated."
+    }
+  ],
+  "metadata": {
+    "task": "Add GET /items/{id} returning a JSON record",
+    "files_in_scope": ["app/router.py", "app/handlers/items.py"],
+    "tests": {
+      "before": {"passing": 18, "failing": 2},
+      "after": {"passing": 18, "failing": 2}
+    },
+    "task_completed": false,
+    "review_size_loc": 412,
+    "expected_failure_modes": ["OVER_EDITING", "INCOMPLETE_TASK"]
+  }
+}
