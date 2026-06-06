@@ -18,6 +18,7 @@ provided path.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -37,7 +38,7 @@ def load_trace(path: str | Path) -> Trace:
     Raises:
         FileNotFoundError: If the file does not exist, with the path embedded
             in the message.
-        ValueError: If the file contains invalid JSON, with the path embedded.
+        json.JSONDecodeError: If the file contains invalid JSON syntax.
         pydantic.ValidationError: If the JSON parses but fails model validation.
     """
     path = Path(path)
@@ -47,7 +48,8 @@ def load_trace(path: str | Path) -> Trace:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise FileNotFoundError(f"Cannot read trace file {path}: {exc}") from exc
-    return Trace.model_validate_json(text)
+    raw = json.loads(text)
+    return Trace.model_validate(raw)
 
 
 def load_suite(path: str | Path) -> Suite:
