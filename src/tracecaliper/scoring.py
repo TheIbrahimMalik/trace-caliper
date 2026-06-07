@@ -157,6 +157,10 @@ def score_tests_passed(trace: Trace) -> DimensionScore:
             score=0.5,
             rationale="Non-numeric test counts in metadata; neutral score.",
         )
+    # Clamp to non-negative integers to avoid division-by-negative and scores
+    # outside [0, 1] when negative counts are provided.
+    passing = max(0, int(passing))
+    failing = max(0, int(failing))
     total = passing + failing
     if total == 0:
         return DimensionScore(
@@ -303,7 +307,13 @@ def score_repo_conventions(trace: Trace) -> DimensionScore:
     """
     meta = trace.metadata or {}
     _raw_scope = meta.get("files_in_scope")
-    scope: set[str] = set(_raw_scope) if isinstance(_raw_scope, (list, tuple, set)) else set()
+    # Sanitize: convert each element to str before building the set to avoid
+    # TypeError when files_in_scope contains unhashable elements (dicts, lists).
+    scope: set[str] = (
+        {str(e) for e in _raw_scope}
+        if isinstance(_raw_scope, (list, tuple, set))
+        else set()
+    )
 
     if not scope:
         return DimensionScore(
@@ -364,7 +374,13 @@ def score_instruction_following(trace: Trace) -> DimensionScore:
     """
     meta = trace.metadata or {}
     _raw_scope = meta.get("files_in_scope")
-    scope: set[str] = set(_raw_scope) if isinstance(_raw_scope, (list, tuple, set)) else set()
+    # Sanitize: convert each element to str before building the set to avoid
+    # TypeError when files_in_scope contains unhashable elements (dicts, lists).
+    scope: set[str] = (
+        {str(e) for e in _raw_scope}
+        if isinstance(_raw_scope, (list, tuple, set))
+        else set()
+    )
 
     if not scope:
         return DimensionScore(

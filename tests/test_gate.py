@@ -660,3 +660,91 @@ def test_example_traces_non_trivial_delta():
     c_modes = detect_failure_modes(candidate)
     cmp = compare(b_score, c_score, b_modes, c_modes)
     assert abs(cmp.aggregate_delta) >= 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Round-2 scrutiny regression tests — gate rationale completeness
+# ---------------------------------------------------------------------------
+
+
+class TestRound2RegressionGate:
+    """Regression tests added in fix-engine-round2 for gate rationale completeness."""
+
+    def test_security_flag_introduced_with_resolved_rationale_mentions_both(self) -> None:
+        """NON-BLOCKING fix: SECURITY_FLAG-introduced case with resolved modes must
+        mention BOTH the security flag AND the resolved codes in rationale.
+
+        This is the specific test required by the fix-engine-round2 feature.
+        """
+        cmp = _make_comparison(
+            baseline_modes=[_make_failure_mode("OVER_EDITING")],
+            candidate_modes=[_make_failure_mode("SECURITY_FLAG", "critical")],
+        )
+        assert "SECURITY_FLAG" in cmp.introduced
+        assert "OVER_EDITING" in cmp.resolved
+
+        decision = decide(cmp)
+        full_rationale = " ".join(decision.rationale)
+        assert "SECURITY_FLAG" in full_rationale, (
+            f"rationale must mention SECURITY_FLAG; got: {full_rationale!r}"
+        )
+        assert "OVER_EDITING" in full_rationale, (
+            f"rationale must mention resolved code OVER_EDITING; got: {full_rationale!r}"
+        )
+
+    def test_security_flag_introduced_with_persistent_non_security_codes_mentions_them(
+        self,
+    ) -> None:
+        """NON-BLOCKING fix: SECURITY_FLAG introduced + persistent non-security code
+        → rationale must cite the persistent code too.
+
+        Without fix: Rule 1 does not mention 'persistent' codes at all.
+        """
+        cmp = _make_comparison(
+            baseline_modes=[_make_failure_mode("OVER_EDITING")],
+            candidate_modes=[
+                _make_failure_mode("SECURITY_FLAG", "critical"),
+                _make_failure_mode("OVER_EDITING"),
+            ],
+        )
+        assert "SECURITY_FLAG" in cmp.introduced
+        assert "OVER_EDITING" in cmp.persistent
+
+        decision = decide(cmp)
+        full_rationale = " ".join(decision.rationale)
+        assert "SECURITY_FLAG" in full_rationale, (
+            f"rationale must mention SECURITY_FLAG; got: {full_rationale!r}"
+        )
+        assert "OVER_EDITING" in full_rationale, (
+            f"rationale must mention persistent code OVER_EDITING; got: {full_rationale!r}"
+        )
+
+    def test_persistent_security_flag_with_other_persistent_codes_mentions_all(
+        self,
+    ) -> None:
+        """NON-BLOCKING fix: persistent SECURITY_FLAG + other persistent non-security code
+        → rationale must cite both.
+
+        Without fix: Rule 2 does not mention non-SECURITY_FLAG persistent codes.
+        """
+        cmp = _make_comparison(
+            baseline_modes=[
+                _make_failure_mode("SECURITY_FLAG", "critical"),
+                _make_failure_mode("OVER_EDITING"),
+            ],
+            candidate_modes=[
+                _make_failure_mode("SECURITY_FLAG", "critical"),
+                _make_failure_mode("OVER_EDITING"),
+            ],
+        )
+        assert "SECURITY_FLAG" in cmp.persistent
+        assert "OVER_EDITING" in cmp.persistent
+
+        decision = decide(cmp)
+        full_rationale = " ".join(decision.rationale)
+        assert "SECURITY_FLAG" in full_rationale, (
+            f"rationale must mention SECURITY_FLAG; got: {full_rationale!r}"
+        )
+        assert "OVER_EDITING" in full_rationale, (
+            f"rationale must mention other persistent code OVER_EDITING; got: {full_rationale!r}"
+        )

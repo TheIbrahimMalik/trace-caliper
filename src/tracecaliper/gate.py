@@ -70,6 +70,11 @@ def decide(comparison: Comparison) -> GateDecision:
                 f"{', '.join(sorted(resolved))}; "
                 "but the new SECURITY_FLAG still blocks PASS."
             )
+        if persistent:
+            rationale.append(
+                f"Persistent failure mode(s) (unchanged from baseline): "
+                f"{', '.join(sorted(persistent))}."
+            )
         _append_delta_note(rationale, delta)
         return GateDecision(decision="HOLD", rationale=rationale)
 
@@ -81,6 +86,12 @@ def decide(comparison: Comparison) -> GateDecision:
             "SECURITY_FLAG persists unresolved from the baseline — "
             "the existing security issue has not been addressed."
         )
+        other_persistent = sorted(persistent - {"SECURITY_FLAG"})
+        if other_persistent:
+            rationale.append(
+                f"Other persistent failure mode(s) also remain unresolved: "
+                f"{', '.join(other_persistent)}."
+            )
         if resolved:
             rationale.append(
                 f"Other failure mode(s) were resolved: {', '.join(sorted(resolved))}."

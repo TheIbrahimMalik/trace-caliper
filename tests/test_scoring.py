@@ -635,3 +635,122 @@ def test_resolve_weights_false_raises() -> None:
     """resolve_weights must reject False (bool) the same as a non-numeric string."""
     with pytest.raises((ValueError, TypeError)):
         resolve_weights({"tests_passed": False})
+
+
+# ---------------------------------------------------------------------------
+# Round-2 scrutiny regression tests
+# ---------------------------------------------------------------------------
+
+
+class TestRound2RegressionScoring:
+    """Regression tests added in fix-engine-round2 for blocking issues."""
+
+    # --- Issue 1: files_in_scope with unhashable elements ---
+
+    def test_score_trace_files_in_scope_containing_dicts_no_raise(self) -> None:
+        """BLOCKING fix: files_in_scope with dict elements must NOT raise TypeError.
+
+        score_repo_conventions and score_instruction_following previously
+        called set(_raw_scope) which raises TypeError on dict values.
+        """
+        trace = _make_trace(
+            metadata={"files_in_scope": [{"path": "src/foo.py"}, {"path": "src/bar.py"}]}
+        )
+        # Must not raise
+        result = score_trace(trace, resolve_weights(None))
+        assert len(result.dimensions) == 7
+        for d in result.dimensions:
+            assert 0.0 <= d.score <= 1.0, (
+                f"Dimension {d.name!r} score {d.score} out of [0, 1]"
+            )
+
+    def test_score_trace_files_in_scope_containing_lists_no_raise(self) -> None:
+        """BLOCKING fix: files_in_scope with list elements must NOT raise TypeError.
+
+        A list-of-lists (unhashable) previously caused set() to raise.
+        """
+        trace = _make_trace(
+            metadata={"files_in_scope": [["src/foo.py", "src/bar.py"], ["tests/test_x.py"]]}
+        )
+        # Must not raise
+        result = score_trace(trace, resolve_weights(None))
+        assert len(result.dimensions) == 7
+        for d in result.dimensions:
+            assert 0.0 <= d.score <= 1.0, (
+                f"Dimension {d.name!r} score {d.score} out of [0, 1]"
+            )
+
+    def test_score_repo_conventions_files_in_scope_dicts_no_raise(self) -> None:
+        """BLOCKING fix: score_repo_conventions must not raise on dict elements."""
+        from tracecaliper.scoring import score_repo_conventions
+        trace = _make_trace(
+            metadata={"files_in_scope": [{"file": "x.py"}, {"file": "y.py"}]}
+        )
+        result = score_repo_conventions(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    def test_score_instruction_following_files_in_scope_dicts_no_raise(self) -> None:
+        """BLOCKING fix: score_instruction_following must not raise on dict elements."""
+        result = score_instruction_following(
+            _make_trace(metadata={"files_in_scope": [{"f": "a.py"}]})
+        )
+        assert 0.0 <= result.score <= 1.0
+
+    def test_score_repo_conventions_files_in_scope_lists_no_raise(self) -> None:
+        """BLOCKING fix: score_repo_conventions must not raise on list-of-lists."""
+        from tracecaliper.scoring import score_repo_conventions
+        trace = _make_trace(
+            metadata={"files_in_scope": [["foo.py"], ["bar.py"]]}
+        )
+        result = score_repo_conventions(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    def test_score_instruction_following_files_in_scope_lists_no_raise(self) -> None:
+        """BLOCKING fix: score_instruction_following must not raise on list-of-lists."""
+        result = score_instruction_following(
+            _make_trace(metadata={"files_in_scope": [["foo.py"], ["bar.py"]]})
+        )
+        assert 0.0 <= result.score <= 1.0
+
+    # --- Issue 2: negative numeric test counts in score_tests_passed ---
+
+    def test_score_tests_passed_negative_counts_valid_score(self) -> None:
+        """BLOCKING fix: passing=-5, failing=-3 must yield a valid DimensionScore
+        with score in [0, 1] (as specified in the fix-engine-round2 feature)."""
+        trace = _make_trace(
+            metadata={"tests": {"after": {"passing": -5, "failing": -3}}}
+        )
+        result = score_tests_passed(trace)
+        assert 0.0 <= result.score <= 1.0, (
+            f"score {result.score!r} out of [0, 1] for negative passing/failing counts"
+        )
+
+    def test_score_tests_passed_mixed_sign_positive_passing_negative_failing_valid_score(
+        self,
+    ) -> None:
+        """BLOCKING fix: passing=5, failing=-10 must not raise pydantic.ValidationError.
+
+        Without the fix: score = 5 / (5 + -10) = 5 / -5 = -1.0 → raises ValidationError.
+        """
+        trace = _make_trace(
+            metadata={"tests": {"after": {"passing": 5, "failing": -10}}}
+        )
+        result = score_tests_passed(trace)
+        assert 0.0 <= result.score <= 1.0, (
+            f"score {result.score!r} out of [0, 1] for passing=5, failing=-10"
+        )
+
+    def test_score_tests_passed_mixed_sign_negative_passing_positive_failing_valid_score(
+        self,
+    ) -> None:
+        """BLOCKING fix: passing=-5, failing=3 must not raise pydantic.ValidationError.
+
+        Without the fix: score = -5 / (-5 + 3) = -5 / -2 = 2.5 → raises ValidationError.
+        """
+        trace = _make_trace(
+            metadata={"tests": {"after": {"passing": -5, "failing": 3}}}
+        )
+        result = score_tests_passed(trace)
+        assert 0.0 <= result.score <= 1.0, (
+            f"score {result.score!r} out of [0, 1] for passing=-5, failing=3"
+        )
