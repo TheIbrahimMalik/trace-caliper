@@ -24,6 +24,7 @@ Section order (fixed):
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 from tracecaliper.models import (
     DEFAULT_WEIGHTS,
@@ -358,7 +359,7 @@ def render_markdown(
     # Section 9 — Footer (deterministic metadata only, no timestamps)
     # -------------------------------------------------------------------------
     short_hash = _suite_hash(suite)
-    comp_basename = comparison_path if comparison_path else "comparison.json"
+    comp_basename = Path(comparison_path).name if comparison_path else "comparison.json"
     lines.append("---")
     lines.append("")
     lines.append(

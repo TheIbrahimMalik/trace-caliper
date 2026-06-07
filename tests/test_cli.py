@@ -704,3 +704,44 @@ class TestSmoke:
         result = runner.invoke(app, ["inspect", "--suite", "missing.yml"])
         combined = _compare_output(result)
         assert "Traceback (most recent call last)" not in combined
+
+
+# ---------------------------------------------------------------------------
+# VAL-CLI-003: subprocess-level module entrypoint test
+# Exercises `python -m tracecaliper --help` via a real subprocess so that
+# __main__.py wiring regressions are caught (CliRunner bypasses __main__).
+# ---------------------------------------------------------------------------
+
+
+class TestModuleEntrypointSubprocess:
+    """Validate `python -m tracecaliper` via a real subprocess invocation.
+
+    This test class covers VAL-CLI-003 (module invocation works) and
+    catches __main__.py wiring regressions that typer.testing.CliRunner
+    cannot detect because CliRunner imports the app directly without
+    spawning a subprocess.
+    """
+
+    def test_module_entrypoint_subprocess(self):
+        """Running `python -m tracecaliper --help` exits 0 and lists all subcommands."""
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "tracecaliper", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"Expected exit code 0, got {result.returncode}.\n"
+            f"stdout: {result.stdout!r}\nstderr: {result.stderr!r}"
+        )
+        assert "inspect" in result.stdout, (
+            f"Expected 'inspect' in stdout, got: {result.stdout!r}"
+        )
+        assert "compare" in result.stdout, (
+            f"Expected 'compare' in stdout, got: {result.stdout!r}"
+        )
+        assert "report" in result.stdout, (
+            f"Expected 'report' in stdout, got: {result.stdout!r}"
+        )
