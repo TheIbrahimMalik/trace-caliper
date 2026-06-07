@@ -2,6 +2,10 @@
 
 Covers happy paths (real example files), missing-file errors, malformed
 YAML/JSON parse errors, and schema-invalid content errors.
+
+Schema-invalid inputs must raise :class:`~tracecaliper.loaders.LoaderError`
+(a :class:`ValueError` subclass) whose ``str()`` contains both the source file
+path AND the name of the offending field, enabling clear user diagnostics.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from tracecaliper.loaders import load_suite, load_trace
+from tracecaliper.loaders import LoaderError, load_suite, load_trace
 from tracecaliper.models import Suite, Trace
 
 
@@ -149,19 +153,31 @@ def test_load_trace_malformed_json_trailing_comma(tmp_path: Path) -> None:
 
 
 def test_load_suite_schema_invalid_missing_required_field(tmp_path: Path) -> None:
-    """load_suite raises ValidationError when required fields are absent."""
+    """load_suite raises LoaderError when required fields are absent.
+
+    The exception str() must contain the source file path AND the offending
+    field name so users can diagnose the problem without a traceback.
+    """
     # Missing 'description' and 'skills'
     bad_suite = tmp_path / "invalid-suite.yml"
     bad_suite.write_text("name: broken-suite\n", encoding="utf-8")
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(LoaderError) as exc_info:
         load_suite(bad_suite)
     error_str = str(exc_info.value)
-    # Pydantic names the offending field in its error output
+    # Must contain the source file path
+    assert "invalid-suite.yml" in error_str
+    # Must contain the offending field name (pydantic includes it)
     assert "skills" in error_str or "description" in error_str
+    # Original ValidationError is chained
+    assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 def test_load_suite_schema_invalid_negative_weight(tmp_path: Path) -> None:
-    """load_suite raises ValidationError for negative dimension weights."""
+    """load_suite raises LoaderError for negative dimension weights.
+
+    The exception str() must contain the source file path AND reference the
+    offending weight dimension.
+    """
     content = """
 name: bad-suite
 description: suite with negative weight
@@ -171,13 +187,21 @@ skills: []
 """
     bad_suite = tmp_path / "neg-weight.yml"
     bad_suite.write_text(content, encoding="utf-8")
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(LoaderError) as exc_info:
         load_suite(bad_suite)
-    assert "tests_passed" in str(exc_info.value) or "negative" in str(exc_info.value).lower()
+    error_str = str(exc_info.value)
+    # Must contain the source file path
+    assert "neg-weight.yml" in error_str
+    # Must contain the offending field/dimension name or indicate negativity
+    assert "tests_passed" in error_str or "negative" in error_str.lower()
+    assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 def test_load_suite_schema_invalid_unknown_weight_key(tmp_path: Path) -> None:
-    """load_suite raises ValidationError for unknown dimension weight keys."""
+    """load_suite raises LoaderError for unknown dimension weight keys.
+
+    The exception str() must contain the source file path AND the unknown key.
+    """
     content = """
 name: bad-suite
 description: suite with unknown dimension
@@ -187,24 +211,41 @@ skills: []
 """
     bad_suite = tmp_path / "unknown-dim.yml"
     bad_suite.write_text(content, encoding="utf-8")
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(LoaderError) as exc_info:
         load_suite(bad_suite)
-    assert "not_a_dimension" in str(exc_info.value)
+    error_str = str(exc_info.value)
+    # Must contain the source file path
+    assert "unknown-dim.yml" in error_str
+    # Must contain the offending dimension key
+    assert "not_a_dimension" in error_str
+    assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 def test_load_trace_schema_invalid_missing_required_field(tmp_path: Path) -> None:
-    """load_trace raises ValidationError when required fields are absent."""
+    """load_trace raises LoaderError when required fields are absent.
+
+    The exception str() must contain the source file path AND an offending
+    field name.
+    """
     # Missing 'steps', 'simulated', 'label'
     bad_trace = tmp_path / "invalid-trace.json"
     bad_trace.write_text(json.dumps({"skill_id": "test-skill"}), encoding="utf-8")
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(LoaderError) as exc_info:
         load_trace(bad_trace)
     error_str = str(exc_info.value)
+    # Must contain the source file path
+    assert "invalid-trace.json" in error_str
+    # Must contain the offending field name
     assert "steps" in error_str or "simulated" in error_str or "label" in error_str
+    assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 def test_load_trace_schema_invalid_label_missing_simulated(tmp_path: Path) -> None:
-    """load_trace raises ValidationError when label does not contain 'simulated'."""
+    """load_trace raises LoaderError when label does not contain 'simulated'.
+
+    The exception str() must contain the source file path AND reference the
+    label/simulated field.
+    """
     bad_trace = tmp_path / "bad-label.json"
     data = {
         "skill_id": "test-skill",
@@ -215,13 +256,22 @@ def test_load_trace_schema_invalid_label_missing_simulated(tmp_path: Path) -> No
         ],
     }
     bad_trace.write_text(json.dumps(data), encoding="utf-8")
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(LoaderError) as exc_info:
         load_trace(bad_trace)
-    assert "simulated" in str(exc_info.value).lower()
+    error_str = str(exc_info.value)
+    # Must contain the source file path
+    assert "bad-label.json" in error_str
+    # Must reference the simulated/label constraint
+    assert "simulated" in error_str.lower()
+    assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 def test_load_trace_schema_invalid_duplicate_step_indices(tmp_path: Path) -> None:
-    """load_trace raises ValidationError for duplicate step indices."""
+    """load_trace raises LoaderError for duplicate step indices.
+
+    The exception str() must contain the source file path AND reference the
+    index/steps field.
+    """
     bad_trace = tmp_path / "dup-indices.json"
     data = {
         "skill_id": "test-skill",
@@ -233,13 +283,22 @@ def test_load_trace_schema_invalid_duplicate_step_indices(tmp_path: Path) -> Non
         ],
     }
     bad_trace.write_text(json.dumps(data), encoding="utf-8")
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(LoaderError) as exc_info:
         load_trace(bad_trace)
-    assert "duplicate" in str(exc_info.value).lower() or "index" in str(exc_info.value).lower()
+    error_str = str(exc_info.value)
+    # Must contain the source file path
+    assert "dup-indices.json" in error_str
+    # Must reference the index/steps constraint
+    assert "duplicate" in error_str.lower() or "index" in error_str.lower()
+    assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 def test_load_trace_schema_invalid_non_monotonic_indices(tmp_path: Path) -> None:
-    """load_trace raises ValidationError for non-monotonically-increasing step indices."""
+    """load_trace raises LoaderError for non-monotonically-increasing step indices.
+
+    The exception str() must contain the source file path AND reference the
+    index/steps constraint.
+    """
     bad_trace = tmp_path / "non-mono.json"
     data = {
         "skill_id": "test-skill",
@@ -251,6 +310,32 @@ def test_load_trace_schema_invalid_non_monotonic_indices(tmp_path: Path) -> None
         ],
     }
     bad_trace.write_text(json.dumps(data), encoding="utf-8")
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(LoaderError) as exc_info:
         load_trace(bad_trace)
-    assert "increasing" in str(exc_info.value).lower() or "index" in str(exc_info.value).lower()
+    error_str = str(exc_info.value)
+    # Must contain the source file path
+    assert "non-mono.json" in error_str
+    # Must reference the index/steps constraint
+    assert "increasing" in error_str.lower() or "index" in error_str.lower()
+    assert isinstance(exc_info.value.__cause__, ValidationError)
+
+
+# ---------------------------------------------------------------------------
+# LoaderError is a ValueError subclass (downstream-compat contract)
+# ---------------------------------------------------------------------------
+
+
+def test_loader_error_is_value_error(tmp_path: Path) -> None:
+    """LoaderError is a subclass of ValueError for downstream compatibility."""
+    bad_trace = tmp_path / "compat-check.json"
+    bad_trace.write_text(json.dumps({"skill_id": "test-skill"}), encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_trace(bad_trace)
+
+
+def test_loader_error_suite_is_value_error(tmp_path: Path) -> None:
+    """LoaderError from load_suite is a subclass of ValueError."""
+    bad_suite = tmp_path / "compat-suite.yml"
+    bad_suite.write_text("name: broken-suite\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_suite(bad_suite)
