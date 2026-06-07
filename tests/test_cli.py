@@ -580,17 +580,21 @@ class TestReport:
         )
         assert result.exit_code != 0
 
-    def test_stub_exits_nonzero_with_valid_args(self, tmp_path: Path):
-        """Report stub exits non-zero (not implemented yet)."""
+    def test_happy_path_exits_zero(self, tmp_path: Path):
+        """VAL-CLI-026: report command exits 0 and writes the output file."""
+        out = tmp_path / "report.md"
         result = runner.invoke(
             app,
             [
                 "report",
                 "--comparison", "reports/comparison.json",
-                "--output", str(tmp_path / "report.md"),
+                "--output", str(out),
             ],
         )
-        assert result.exit_code != 0
+        assert result.exit_code == 0, (
+            f"report command failed (exit {result.exit_code}): {result.output!r}"
+        )
+        assert out.exists(), "Report file was not created"
 
 
 # ---------------------------------------------------------------------------
@@ -623,22 +627,26 @@ class TestSmoke:
         assert result.exception is None
         assert out.exists()
 
-    def test_report_stub_smoke(self, tmp_path: Path):
-        """Smoke: report stub runs without unexpected exception."""
+    def test_report_smoke(self, tmp_path: Path):
+        """Smoke: report command runs successfully on the bundled comparison file."""
+        out = tmp_path / "skill-delta-report.md"
         result = runner.invoke(
             app,
             [
                 "report",
                 "--comparison", "reports/comparison.json",
-                "--output", str(tmp_path / "report.md"),
+                "--output", str(out),
             ],
         )
-        # Stub exits non-zero — that's expected
-        assert result.exit_code != 0
-        # Should not be an unhandled exception (typer.Exit is expected)
-        # result.exception can be SystemExit(1) which is from typer.Exit
-        if result.exception is not None:
-            assert isinstance(result.exception, SystemExit)
+        assert result.exit_code == 0, (
+            f"report failed (exit {result.exit_code}): {result.output!r}"
+        )
+        assert result.exception is None
+        assert out.exists()
+        # Must contain the simulated disclaimer and gate decision
+        content = out.read_text()
+        assert "simulated" in content.lower()
+        assert any(d in content for d in ("PASS", "HOLD", "INVESTIGATE"))
 
     def test_full_compare_pipeline_output(self, tmp_path: Path):
         """Smoke: compare produces a fully valid JSON bundle."""

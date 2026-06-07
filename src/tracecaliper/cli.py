@@ -5,8 +5,7 @@ Three subcommands:
 - ``inspect``: load and pretty-print a suite configuration.
 - ``compare``: run the full scoring/detection/comparison/gate pipeline and
   write a deterministic JSON bundle.
-- ``report``: generate a Skill Delta Report (stub — implemented in the
-  ``skill-delta-report`` feature).
+- ``report``: generate a Skill Delta Report from a comparison JSON bundle.
 
 Error contract: all user-input errors emit a human-readable message to
 stderr and exit with a non-zero code.  HOLD/INVESTIGATE gate decisions are
@@ -22,6 +21,7 @@ from typing import Annotated, NoReturn
 
 import typer
 import yaml
+from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
 
@@ -29,6 +29,14 @@ from tracecaliper.comparison import compare as _run_compare
 from tracecaliper.failure_modes import detect_failure_modes
 from tracecaliper.gate import decide
 from tracecaliper.loaders import LoaderError, load_suite, load_trace
+from tracecaliper.models import (
+    Comparison,
+    FailureMode,
+    GateDecision,
+    Skill,
+    Suite,
+)
+from tracecaliper.report import render_markdown
 from tracecaliper.scoring import resolve_weights, score_trace
 
 app = typer.Typer(
@@ -180,11 +188,21 @@ def compare(
     cmp = _run_compare(baseline_score, candidate_score, baseline_modes, candidate_modes)
     gate = decide(cmp)
 
+    # ── build failure-mode detail lookups ────────────────────────────────────
+    intro_codes = set(cmp.introduced)
+    resolved_codes = set(cmp.resolved)
+    persistent_codes = set(cmp.persistent)
+    introduced_mode_objs = [m for m in candidate_modes if m.code in intro_codes]
+    resolved_mode_objs = [m for m in baseline_modes if m.code in resolved_codes]
+    persistent_mode_objs = [m for m in baseline_modes if m.code in persistent_codes]
+
     # ── build deterministic JSON bundle ──────────────────────────────────────
     # Top-level keys are chosen to satisfy the validation contract:
-    #   "deltas"       ← matches "dimensions"|"deltas"
-    #   "failure_modes" ← exact match
-    #   "gate"         ← matches "gate"|"decision"
+    #   "deltas"              ← matches "dimensions"|"deltas"
+    #   "failure_modes"       ← exact match (codes only, for compatibility)
+    #   "failure_mode_details" ← full FailureMode objects for the report renderer
+    #   "gate"                ← matches "gate"|"decision"
+    #   "suite_metadata"      ← name/description for the report renderer
     bundle: dict = {
         "comparison": json.loads(cmp.model_dump_json()),
         "deltas": {
@@ -196,7 +214,19 @@ def compare(
             "resolved": cmp.resolved,
             "persistent": cmp.persistent,
         },
+        "failure_mode_details": {
+            "introduced": [json.loads(m.model_dump_json()) for m in introduced_mode_objs],
+            "resolved": [json.loads(m.model_dump_json()) for m in resolved_mode_objs],
+            "persistent": [json.loads(m.model_dump_json()) for m in persistent_mode_objs],
+        },
         "gate": json.loads(gate.model_dump_json()),
+        "suite_metadata": {
+            "name": "default",
+            "description": (
+                "Default TraceCaliper evaluation suite "
+                "(applies documented default dimension weights)."
+            ),
+        },
     }
     json_text = json.dumps(bundle, indent=2, sort_keys=True)
 
@@ -257,13 +287,122 @@ def report(
         ),
     ],
 ) -> None:
-    """Generate a Skill Delta Report from a comparison JSON file."""
-    typer.echo(
-        "Error: report command is not yet implemented. "
-        "It will be available after the skill-delta-report feature.",
-        err=True,
+    """Generate a polished Skill Delta Report from a comparison JSON bundle."""
+    # ── load and validate the comparison bundle ───────────────────────────────
+    if not comparison.exists():
+        _emit_error(f"Comparison file not found: {comparison}")
+
+    try:
+        raw_text = comparison.read_text(encoding="utf-8")
+    except OSError as exc:
+        _emit_error(f"Cannot read comparison file '{comparison}': {exc}")
+
+    try:
+        bundle = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        _emit_error(f"JSON parse error in '{comparison}': {exc}")
+
+    if not isinstance(bundle, dict):
+        _emit_error(
+            f"Malformed comparison file '{comparison}': "
+            "expected a JSON object at the top level."
+        )
+
+    # ── extract Comparison model ──────────────────────────────────────────────
+    if "comparison" not in bundle:
+        _emit_error(
+            f"Malformed comparison file '{comparison}': "
+            "missing required key 'comparison'."
+        )
+    try:
+        cmp = Comparison.model_validate(bundle["comparison"])
+    except (ValidationError, Exception) as exc:
+        _emit_error(
+            f"Schema validation failed for comparison in '{comparison}': {exc}"
+        )
+
+    # ── extract GateDecision model ────────────────────────────────────────────
+    if "gate" not in bundle:
+        _emit_error(
+            f"Malformed comparison file '{comparison}': "
+            "missing required key 'gate'."
+        )
+    try:
+        gate = GateDecision.model_validate(bundle["gate"])
+    except (ValidationError, Exception) as exc:
+        _emit_error(
+            f"Schema validation failed for gate in '{comparison}': {exc}"
+        )
+
+    # ── reconstruct Suite from embedded metadata + resolved weights ───────────
+    suite_meta = bundle.get("suite_metadata") or {}
+    suite_name = suite_meta.get("name") or "default"
+    suite_desc = suite_meta.get("description") or (
+        "Default TraceCaliper evaluation suite "
+        "(applies documented default dimension weights)."
     )
-    raise typer.Exit(code=1)
+    # Weights come from the comparison's baseline score (already resolved)
+    weights_data: dict = {}
+    try:
+        weights_data = dict(bundle["comparison"]["baseline"]["weights"])
+    except (KeyError, TypeError):
+        pass
+    suite = Suite(
+        name=suite_name,
+        description=suite_desc,
+        skills=[],
+        weights=weights_data,
+    )
+
+    # ── extract full failure-mode detail objects ──────────────────────────────
+    fmd = bundle.get("failure_mode_details") or {}
+    try:
+        introduced_modes: list[FailureMode] = [
+            FailureMode.model_validate(m) for m in (fmd.get("introduced") or [])
+        ]
+        resolved_modes: list[FailureMode] = [
+            FailureMode.model_validate(m) for m in (fmd.get("resolved") or [])
+        ]
+        persistent_modes: list[FailureMode] = [
+            FailureMode.model_validate(m) for m in (fmd.get("persistent") or [])
+        ]
+    except (ValidationError, Exception) as exc:
+        _emit_error(
+            f"Schema validation failed for failure_mode_details in '{comparison}': {exc}"
+        )
+
+    # ── render the report ─────────────────────────────────────────────────────
+    md = render_markdown(
+        cmp,
+        suite,
+        gate,
+        introduced_modes=introduced_modes or None,
+        resolved_modes=resolved_modes or None,
+        persistent_modes=persistent_modes or None,
+        comparison_path=comparison.name,
+    )
+
+    # ── write output (no partial write on error) ───────────────────────────────
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        _emit_error(
+            f"Cannot create output directory '{output.parent}': "
+            f"permission denied — {exc}"
+        )
+    except OSError as exc:
+        _emit_error(f"Cannot create output directory '{output.parent}': {exc}")
+
+    try:
+        output.write_text(md, encoding="utf-8")
+    except PermissionError as exc:
+        _emit_error(
+            f"Cannot write report to '{output}': permission denied — {exc}"
+        )
+    except OSError as exc:
+        _emit_error(f"Cannot write report to '{output}': {exc}")
+
+    typer.echo(f"Report written → {output}")
 
 
 if __name__ == "__main__":
