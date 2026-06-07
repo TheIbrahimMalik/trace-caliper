@@ -511,6 +511,117 @@ def test_full_pipeline_produces_valid_decision():
 
 
 # ---------------------------------------------------------------------------
+# Fix: negative-aggregate-delta with resolved modes — rationale must cite codes
+# ---------------------------------------------------------------------------
+
+
+def test_negative_delta_with_resolved_modes_rationale_cites_codes():
+    """BLOCKING fix: Rule 7 (negative delta) with resolved modes must cite them in rationale.
+
+    When aggregate_delta < 0 and some failure modes were resolved, the rationale
+    must mention the resolved codes — never emit 'no failure-mode changes'.
+    """
+    cmp = _make_comparison(
+        baseline_scores={n: 0.8 for n in DIMENSION_NAMES},
+        candidate_scores={n: 0.2 for n in DIMENSION_NAMES},
+        baseline_modes=[_make_failure_mode("OVER_EDITING")],
+        candidate_modes=[],
+    )
+    # Preconditions
+    assert cmp.aggregate_delta < 0, "aggregate_delta must be negative for this test"
+    assert cmp.resolved == ["OVER_EDITING"], "OVER_EDITING must be resolved"
+    assert cmp.introduced == [], "nothing must be introduced"
+
+    decision = decide(cmp)
+    assert decision.decision == "HOLD", f"expected HOLD but got {decision.decision}"
+
+    full_rationale = " ".join(decision.rationale)
+    # Resolved code must appear in rationale
+    assert "OVER_EDITING" in full_rationale, (
+        f"rationale must cite resolved code 'OVER_EDITING'; got: {full_rationale!r}"
+    )
+    # Must NOT claim there were no failure-mode changes
+    assert "no failure-mode changes" not in full_rationale.lower(), (
+        f"rationale must not say 'no failure-mode changes' when resolved is non-empty; "
+        f"got: {full_rationale!r}"
+    )
+
+
+def test_negative_delta_with_resolved_modes_rationale_never_says_no_changes():
+    """BLOCKING fix: negative-delta + resolved modes → rationale must NOT say 'no failure-mode changes'."""
+    cmp = _make_comparison(
+        baseline_scores={n: 0.9 for n in DIMENSION_NAMES},
+        candidate_scores={n: 0.1 for n in DIMENSION_NAMES},
+        baseline_modes=[
+            _make_failure_mode("TEST_REGRESSION", "high"),
+            _make_failure_mode("INCOMPLETE_TASK"),
+        ],
+        candidate_modes=[],
+    )
+    assert cmp.aggregate_delta < 0
+    assert set(cmp.resolved) == {"TEST_REGRESSION", "INCOMPLETE_TASK"}
+    assert cmp.introduced == []
+
+    decision = decide(cmp)
+    full_rationale = " ".join(decision.rationale)
+    assert "TEST_REGRESSION" in full_rationale or "INCOMPLETE_TASK" in full_rationale, (
+        "rationale must mention at least one resolved code"
+    )
+    assert "no failure-mode changes" not in full_rationale.lower(), (
+        "rationale must not say 'no failure-mode changes' when resolved modes exist"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix: offsetting per-dimension deltas — must NOT be labeled identical/no-op
+# ---------------------------------------------------------------------------
+
+
+def test_offsetting_deltas_not_labeled_no_op():
+    """NON-BLOCKING fix: offsetting per-dimension deltas (aggregate==0) must not be labeled identical.
+
+    When tests_passed improves and task_completion regresses by the same amount
+    (same weight) so that aggregate_delta==0, but per-dimension deltas are not
+    all zero, the no-op/identical rationale must NOT be emitted.
+    """
+    # tests_passed and task_completion have weight 0.25 each.
+    # +0.2 on tests_passed and -0.2 on task_completion → aggregate delta = 0.
+    baseline_scores = {n: 0.5 for n in DIMENSION_NAMES}
+    candidate_scores = dict(baseline_scores)
+    candidate_scores["tests_passed"] = 0.7   # +0.2
+    candidate_scores["task_completion"] = 0.3  # -0.2
+
+    cmp = _make_comparison(
+        baseline_scores=baseline_scores,
+        candidate_scores=candidate_scores,
+        baseline_modes=[],
+        candidate_modes=[],
+    )
+
+    # Verify preconditions
+    assert cmp.aggregate_delta == pytest.approx(0.0), (
+        f"aggregate_delta must be 0.0, got {cmp.aggregate_delta}"
+    )
+    assert cmp.introduced == []
+    assert cmp.resolved == []
+    assert cmp.dimension_deltas["tests_passed"] == pytest.approx(0.2)
+    assert cmp.dimension_deltas["task_completion"] == pytest.approx(-0.2)
+
+    decision = decide(cmp)
+
+    full_rationale = " ".join(decision.rationale)
+    # The no-op/identical rationale phrase must NOT appear
+    assert "identical comparison" not in full_rationale.lower(), (
+        f"offsetting deltas must not produce 'identical comparison' rationale; "
+        f"got: {full_rationale!r}"
+    )
+    assert "identical" not in full_rationale.lower() or "not identical" in full_rationale.lower(), (
+        f"rationale must not label offsetting-delta comparison as identical; "
+        f"got: {full_rationale!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # VAL-EX-007: v1 and v2 traces produce distinct failure-mode sets
 # VAL-EX-008: End-to-end pipeline produces non-trivial delta
 # ---------------------------------------------------------------------------

@@ -94,17 +94,18 @@ def decide(comparison: Comparison) -> GateDecision:
 
     # ------------------------------------------------------------------
     # Rule 3: No-op / identical comparison → PASS
+    # Fires only when ALL per-dimension deltas are exactly 0, aggregate
+    # delta is 0, and all three diff sets are empty.  Comparisons where
+    # per-dimension changes offset each other (aggregate==0 but individual
+    # dimensions moved) fall through to the regular rules below.
     # ------------------------------------------------------------------
-    if not introduced and not resolved and delta == 0.0:
+    all_dim_deltas_zero = all(v == 0.0 for v in comparison.dimension_deltas.values())
+    if not introduced and not resolved and not persistent and delta == 0.0 and all_dim_deltas_zero:
         rationale.append(
-            "Identical comparison: aggregate delta is 0.0 and no failure modes "
-            "were introduced or resolved."
+            "Identical comparison: aggregate delta is 0.0, all per-dimension "
+            "deltas are 0.0, and no failure modes were introduced, resolved, "
+            "or persistent."
         )
-        if persistent:
-            rationale.append(
-                f"Persistent failure mode(s) unchanged: "
-                f"{', '.join(sorted(persistent))}."
-            )
         return GateDecision(decision="PASS", rationale=rationale)
 
     # ------------------------------------------------------------------
@@ -162,13 +163,25 @@ def decide(comparison: Comparison) -> GateDecision:
         return GateDecision(decision="HOLD", rationale=rationale)
 
     # ------------------------------------------------------------------
-    # Rule 7: Negative aggregate delta only (no failure-mode changes) → HOLD
+    # Rule 7: Negative aggregate delta (no introduced modes) → HOLD
+    # At this point introduced is always empty (Rules 5 and 6 handled
+    # non-empty introduced).  resolved may be non-empty when Rule 4 was
+    # skipped due to a negative delta.  Rationale always cites concrete
+    # resolved codes when present rather than claiming no changes occurred.
     # ------------------------------------------------------------------
     if delta < 0.0:
         rationale.append(
             f"Aggregate delta is strictly negative ({delta:+.6f}), "
-            "indicating an overall score regression with no failure-mode changes."
+            "reflecting an overall score regression."
         )
+        if resolved:
+            rationale.append(
+                f"Failure mode(s) resolved in candidate: "
+                f"{', '.join(sorted(resolved))}; "
+                "but the negative aggregate delta still blocks PASS."
+            )
+        else:
+            rationale.append("No failure modes were introduced or resolved.")
         if persistent:
             rationale.append(
                 f"Persistent failure mode(s): {', '.join(sorted(persistent))}."
