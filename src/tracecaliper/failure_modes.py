@@ -114,6 +114,16 @@ The metadata heuristic (after.failing > before.failing) handles the broader
 regression signal.
 """
 
+_PYTEST_FAILED_NAME_RE = re.compile(
+    r"pytest_failed:\s*(\S+)",
+    re.IGNORECASE,
+)
+"""Regex to extract the failing test identifier from a ``pytest_failed`` signal.
+
+Applied to step evidence of the form ``pytest_failed: <test_id> [FAILED]``
+to surface ``<test_id>`` (e.g. ``tests/test_items.py::test_get_item``).
+"""
+
 
 # ---------------------------------------------------------------------------
 # Individual detectors
@@ -155,9 +165,13 @@ def detect_test_regression(trace: Trace) -> Optional[FailureMode]:
     Two independent heuristics:
 
     1. **Metadata heuristic**: ``metadata.tests.after.failing`` >
-       ``metadata.tests.before.failing`` (definitive signal).
+       ``metadata.tests.before.failing`` (definitive signal).  When
+       ``metadata.failing_tests`` is present its entries are listed
+       explicitly in the evidence; otherwise the numeric delta is reported.
     2. **Evidence heuristic**: any step's ``evidence`` matches
        :data:`_TEST_REGRESSION_RE` (``pytest_failed``, ``test_regression``).
+       When ``pytest_failed: <test_id>`` patterns are found the evidence
+       explicitly enumerates the extracted test identifiers.
 
     The metadata heuristic is checked first; if it fires, the evidence
     heuristic is skipped to avoid duplicate reporting.
@@ -170,31 +184,61 @@ def detect_test_regression(trace: Trace) -> Optional[FailureMode]:
         before_failing = int(before.get("failing") or 0)
         after_failing = int(after.get("failing") or 0)
         if after_failing > before_failing:
-            return FailureMode(
-                code="TEST_REGRESSION",
-                severity="high",
-                evidence=(
-                    f"Test regression detected: failing tests increased from "
-                    f"{before_failing} to {after_failing} "
-                    f"(+{after_failing - before_failing} newly failing)."
-                ),
-            )
+            delta = after_failing - before_failing
+            # Prefer named identifiers from metadata.failing_tests when available.
+            named: list[str] = []
+            failing_tests_meta = meta.get("failing_tests")
+            if isinstance(failing_tests_meta, list):
+                named = [str(t) for t in failing_tests_meta if t]
+            if named:
+                tests_listed = ", ".join(named)
+                return FailureMode(
+                    code="TEST_REGRESSION",
+                    severity="high",
+                    evidence=(
+                        f"Test regression detected: failing tests increased from "
+                        f"{before_failing} to {after_failing} "
+                        f"(+{delta} newly failing). "
+                        f"Failing tests: {tests_listed}."
+                    ),
+                )
+            else:
+                return FailureMode(
+                    code="TEST_REGRESSION",
+                    severity="high",
+                    evidence=(
+                        f"{delta} test(s) regressing: "
+                        f"metadata.tests_after.failing={after_failing} vs "
+                        f"metadata.tests_before.failing={before_failing}."
+                    ),
+                )
 
-    flagged: list[str] = []
+    # Evidence heuristic: extract named test identifiers from pytest_failed patterns.
+    flagged_ids: list[str] = []
+    flagged_steps: list[str] = []
     for step in trace.steps:
         m = _TEST_REGRESSION_RE.search(step.evidence)
         if m:
-            flagged.append(
-                f"step {step.index} ({step.action!r}): matched {m.group(0)!r}"
+            name_m = _PYTEST_FAILED_NAME_RE.search(step.evidence)
+            if name_m:
+                flagged_ids.append(name_m.group(1))
+            else:
+                flagged_steps.append(
+                    f"step {step.index} ({step.action!r}): matched {m.group(0)!r}"
+                )
+    if flagged_ids or flagged_steps:
+        parts: list[str] = []
+        if flagged_ids:
+            parts.append(f"Failing tests: {', '.join(flagged_ids)}.")
+        if flagged_steps:
+            parts.append(
+                f"Test-regression signal(s) found in {len(flagged_steps)} step(s): "
+                f"{'; '.join(flagged_steps)}."
             )
-    if flagged:
         return FailureMode(
             code="TEST_REGRESSION",
             severity="high",
-            evidence=(
-                f"Test-regression signal(s) found in "
-                f"{len(flagged)} step(s): {'; '.join(flagged)}."
-            ),
+            evidence=" ".join(parts),
         )
     return None
 
@@ -393,4 +437,5 @@ __all__ = [
     "detect_security_flag",
     "detect_test_regression",
     "detect_failure_modes",
+    "_PYTEST_FAILED_NAME_RE",
 ]

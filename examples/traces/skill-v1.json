@@ -56,10 +56,15 @@
     "files_in_scope": ["app/router.py", "app/handlers/items.py"],
     "tests": {
       "before": {"passing": 18, "failing": 2},
-      "after": {"passing": 18, "failing": 2}
+      "after": {"passing": 17, "failing": 3}
     },
+    "failing_tests": [
+      "tests/test_items.py::test_get_item",
+      "tests/test_items.py::test_list_items",
+      "tests/test_serializers.py::test_item_serializer"
+    ],
     "task_completed": false,
     "review_size_loc": 412,
-    "expected_failure_modes": ["OVER_EDITING", "INCOMPLETE_TASK"]
+    "expected_failure_modes": ["OVER_EDITING", "INCOMPLETE_TASK", "TEST_REGRESSION"]
   }
 }

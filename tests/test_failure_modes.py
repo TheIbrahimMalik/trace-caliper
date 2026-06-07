@@ -400,7 +400,8 @@ def test_security_flag_not_on_clean(clean_trace: Trace) -> None:
 def test_test_regression_fires_evidence(
     test_regression_trace_evidence: Trace,
 ) -> None:
-    """VAL-FAIL-008: TEST_REGRESSION fires when evidence contains pytest_failed signal."""
+    """VAL-FAIL-008: TEST_REGRESSION fires when evidence contains pytest_failed signal;
+    evidence enumerates the failing test identifier extracted from the signal."""
     from tracecaliper.failure_modes import detect_failure_modes
 
     modes = detect_failure_modes(test_regression_trace_evidence)
@@ -408,6 +409,10 @@ def test_test_regression_fires_evidence(
     assert "TEST_REGRESSION" in codes
     tr = next(m for m in modes if m.code == "TEST_REGRESSION")
     assert tr.evidence.strip(), "evidence must be non-empty"
+    # The evidence must explicitly reference the named failing test identifier.
+    assert "tests/test_items.py::test_get_item" in tr.evidence, (
+        f"evidence must list the failing test identifier; got: {tr.evidence!r}"
+    )
 
 
 def test_test_regression_fires_metadata(
@@ -421,6 +426,47 @@ def test_test_regression_fires_metadata(
     assert "TEST_REGRESSION" in codes
     tr = next(m for m in modes if m.code == "TEST_REGRESSION")
     assert tr.evidence.strip()
+
+
+@pytest.fixture
+def test_regression_trace_metadata_named() -> Trace:
+    """A trace whose metadata shows a regression AND provides named failing tests."""
+    return _make_trace(
+        steps=[
+            _make_step(1, "edit_code", ["app/main.py"], "Edited code."),
+        ],
+        metadata={
+            "task_completed": True,
+            "tests": {
+                "before": {"passing": 10, "failing": 1},
+                "after": {"passing": 9, "failing": 2},
+            },
+            "failing_tests": [
+                "tests/test_auth.py::test_login",
+                "tests/test_auth.py::test_logout",
+            ],
+            "review_size_loc": 50,
+        },
+    )
+
+
+def test_test_regression_evidence_lists_failing_tests_from_metadata(
+    test_regression_trace_metadata_named: Trace,
+) -> None:
+    """VAL-FAIL-008: When metadata.failing_tests is provided, evidence explicitly
+    enumerates the named failing test identifiers."""
+    from tracecaliper.failure_modes import detect_failure_modes
+
+    modes = detect_failure_modes(test_regression_trace_metadata_named)
+    codes = {m.code for m in modes}
+    assert "TEST_REGRESSION" in codes
+    tr = next(m for m in modes if m.code == "TEST_REGRESSION")
+    assert "tests/test_auth.py::test_login" in tr.evidence, (
+        f"evidence must list test_login; got: {tr.evidence!r}"
+    )
+    assert "tests/test_auth.py::test_logout" in tr.evidence, (
+        f"evidence must list test_logout; got: {tr.evidence!r}"
+    )
 
 
 def test_test_regression_not_on_improving_v2(trace_v2: Trace) -> None:
