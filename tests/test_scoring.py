@@ -485,3 +485,153 @@ def test_scoring_module_importable() -> None:
         resolve_weights,
         score_trace,
     )
+
+
+# ---------------------------------------------------------------------------
+# Robustness regression tests — scorers must never raise on valid Traces
+# ---------------------------------------------------------------------------
+
+
+from tracecaliper.scoring import (
+    score_instruction_following,
+    score_over_editing,
+    score_repo_conventions,
+    score_reviewability,
+    score_tests_passed,
+)
+
+
+class TestScorerRobustness:
+    """Regression tests: scorers degrade gracefully on unusual-but-schema-valid metadata."""
+
+    # --- files_in_scope edge cases ---
+
+    def test_files_in_scope_as_int_no_raise(self) -> None:
+        """files_in_scope=int does not raise; over_editing degrades to neutral."""
+        trace = _make_trace(metadata={"files_in_scope": 5})
+        result = score_over_editing(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    def test_files_in_scope_as_dict_no_raise(self) -> None:
+        """files_in_scope=dict (non-list) does not raise; over_editing degrades gracefully."""
+        trace = _make_trace(metadata={"files_in_scope": {"foo": "bar"}})
+        result = score_over_editing(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    def test_files_in_scope_as_int_repo_conventions_no_raise(self) -> None:
+        """files_in_scope=int does not raise in repo_conventions scorer."""
+        trace = _make_trace(metadata={"files_in_scope": 42})
+        result = score_repo_conventions(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    def test_files_in_scope_as_dict_repo_conventions_no_raise(self) -> None:
+        """files_in_scope=dict does not raise in repo_conventions scorer."""
+        trace = _make_trace(metadata={"files_in_scope": {"a": 1}})
+        result = score_repo_conventions(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    def test_files_in_scope_as_int_instruction_following_no_raise(self) -> None:
+        """files_in_scope=int does not raise in instruction_following scorer."""
+        trace = _make_trace(metadata={"files_in_scope": 3})
+        result = score_instruction_following(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    def test_files_in_scope_as_dict_instruction_following_no_raise(self) -> None:
+        """files_in_scope=dict does not raise in instruction_following scorer."""
+        trace = _make_trace(metadata={"files_in_scope": {"k": "v"}})
+        result = score_instruction_following(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    # --- tests_before / tests_after edge cases ---
+
+    def test_tests_after_passing_as_string_no_raise(self) -> None:
+        """tests.after.passing/failing as strings => neutral score, no exception."""
+        trace = _make_trace(
+            metadata={"tests": {"after": {"passing": "15", "failing": "2"}}}
+        )
+        result = score_tests_passed(trace)
+        assert result.score == pytest.approx(0.5)
+
+    def test_tests_after_passing_as_none_no_raise(self) -> None:
+        """tests.after.passing/failing as None => neutral score, no exception."""
+        trace = _make_trace(
+            metadata={"tests": {"after": {"passing": None, "failing": None}}}
+        )
+        result = score_tests_passed(trace)
+        assert result.score == pytest.approx(0.5)
+
+    def test_tests_after_as_string_no_raise(self) -> None:
+        """tests.after as a string instead of dict => neutral score, no exception."""
+        trace = _make_trace(metadata={"tests": {"after": "15 passed, 0 failed"}})
+        result = score_tests_passed(trace)
+        assert result.score == pytest.approx(0.5)
+
+    def test_tests_after_as_none_no_raise(self) -> None:
+        """tests.after as None => neutral score, no exception."""
+        trace = _make_trace(metadata={"tests": {"after": None}})
+        result = score_tests_passed(trace)
+        assert result.score == pytest.approx(0.5)
+
+    # --- review_size_loc edge cases ---
+
+    def test_review_size_loc_as_nonnumeric_string_no_raise(self) -> None:
+        """review_size_loc as non-numeric string => neutral score, no exception."""
+        trace = _make_trace(metadata={"review_size_loc": "large"})
+        result = score_reviewability(trace)
+        assert result.score == pytest.approx(0.5)
+
+    def test_review_size_loc_as_numeric_string_no_raise(self) -> None:
+        """review_size_loc as numeric string e.g. '200' => valid score, no exception."""
+        trace = _make_trace(metadata={"review_size_loc": "200"})
+        result = score_reviewability(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    def test_review_size_loc_as_negative_no_raise(self) -> None:
+        """review_size_loc as negative number => clamped, no exception, score in [0,1]."""
+        trace = _make_trace(metadata={"review_size_loc": -100})
+        result = score_reviewability(trace)
+        assert 0.0 <= result.score <= 1.0
+
+    # --- missing optional metadata entirely ---
+
+    def test_score_trace_missing_metadata_entirely_no_raise(self) -> None:
+        """Trace with metadata=None does not raise on full score_trace call."""
+        trace = _make_trace(metadata=None)
+        result = score_trace(trace, resolve_weights(None))
+        assert 0.0 <= result.weighted_total <= sum(resolve_weights(None).values())
+        assert len(result.dimensions) == 7
+
+    def test_score_trace_empty_metadata_no_raise(self) -> None:
+        """Trace with metadata={} does not raise on full score_trace call."""
+        trace = _make_trace(metadata={})
+        result = score_trace(trace, resolve_weights(None))
+        assert 0.0 <= result.weighted_total <= sum(resolve_weights(None).values())
+
+    def test_score_trace_files_in_scope_int_no_raise(self) -> None:
+        """Full score_trace call with files_in_scope=int does not raise."""
+        trace = _make_trace(metadata={"files_in_scope": 7})
+        result = score_trace(trace, resolve_weights(None))
+        assert 0.0 <= result.weighted_total <= sum(resolve_weights(None).values())
+
+    def test_score_trace_review_size_loc_string_no_raise(self) -> None:
+        """Full score_trace call with review_size_loc as string does not raise."""
+        trace = _make_trace(metadata={"review_size_loc": "huge"})
+        result = score_trace(trace, resolve_weights(None))
+        assert 0.0 <= result.weighted_total <= sum(resolve_weights(None).values())
+
+
+# ---------------------------------------------------------------------------
+# VAL-SCORE-006 extension: bool weights must be rejected like non-numeric strings
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_weights_true_raises() -> None:
+    """resolve_weights must reject True (bool) the same as a non-numeric string."""
+    with pytest.raises((ValueError, TypeError)):
+        resolve_weights({"tests_passed": True})
+
+
+def test_resolve_weights_false_raises() -> None:
+    """resolve_weights must reject False (bool) the same as a non-numeric string."""
+    with pytest.raises((ValueError, TypeError)):
+        resolve_weights({"tests_passed": False})

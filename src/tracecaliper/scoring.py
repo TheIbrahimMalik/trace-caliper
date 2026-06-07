@@ -96,18 +96,18 @@ def resolve_weights(suite_weights: dict[str, float] | None) -> dict[str, float]:
         any extra overrides).
 
     Raises:
-        ValueError: If any value is negative or non-numeric, with the error
-            message referencing the offending dimension name.
+        ValueError: If any value is negative, non-numeric, or a bool, with the
+            error message referencing the offending dimension name.
     """
     if suite_weights is None:
         return dict(DEFAULT_WEIGHTS)
 
     resolved = dict(DEFAULT_WEIGHTS)
     for key, value in suite_weights.items():
-        if not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(
                 f"Non-numeric weight for dimension {key!r}: {value!r}; "
-                "weights must be a numeric int or float"
+                "weights must be a numeric int or float (not bool)"
             )
         fval = float(value)
         if fval < 0:
@@ -150,6 +150,12 @@ def score_tests_passed(trace: Trace) -> DimensionScore:
             name="tests_passed",
             score=0.5,
             rationale="Incomplete test outcome data in trace metadata; neutral score.",
+        )
+    if not isinstance(passing, (int, float)) or not isinstance(failing, (int, float)):
+        return DimensionScore(
+            name="tests_passed",
+            score=0.5,
+            rationale="Non-numeric test counts in metadata; neutral score.",
         )
     total = passing + failing
     if total == 0:
@@ -244,7 +250,8 @@ def score_over_editing(trace: Trace) -> DimensionScore:
     - ratio ≥ :data:`_OVER_EDIT_MAX_RATIO` → 0.0
     """
     meta = trace.metadata or {}
-    scope: list[str] = list(meta.get("files_in_scope") or [])
+    _raw_scope = meta.get("files_in_scope")
+    scope: list[str] = list(_raw_scope) if isinstance(_raw_scope, (list, tuple, set)) else []
     scope_size = max(len(scope), 1)
 
     touched: set[str] = set()
@@ -295,7 +302,8 @@ def score_repo_conventions(trace: Trace) -> DimensionScore:
     - No ``files_in_scope`` defined → 0.5 neutral.
     """
     meta = trace.metadata or {}
-    scope: set[str] = set(meta.get("files_in_scope") or [])
+    _raw_scope = meta.get("files_in_scope")
+    scope: set[str] = set(_raw_scope) if isinstance(_raw_scope, (list, tuple, set)) else set()
 
     if not scope:
         return DimensionScore(
@@ -355,7 +363,8 @@ def score_instruction_following(trace: Trace) -> DimensionScore:
     - No steps → 1.0 (instructions trivially followed).
     """
     meta = trace.metadata or {}
-    scope: set[str] = set(meta.get("files_in_scope") or [])
+    _raw_scope = meta.get("files_in_scope")
+    scope: set[str] = set(_raw_scope) if isinstance(_raw_scope, (list, tuple, set)) else set()
 
     if not scope:
         return DimensionScore(
@@ -423,7 +432,15 @@ def score_reviewability(trace: Trace) -> DimensionScore:
             rationale="No review_size_loc in metadata; neutral score.",
         )
 
-    loc_f = float(loc)
+    try:
+        loc_f = float(loc)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return DimensionScore(
+            name="reviewability",
+            score=0.5,
+            rationale="Non-numeric review_size_loc in metadata; neutral score.",
+        )
+    loc_f = max(0.0, loc_f)
     if loc_f <= _REVIEWABILITY_MIN_LOC:
         return DimensionScore(
             name="reviewability",
