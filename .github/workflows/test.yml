@@ -1,0 +1,28 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Run demo workflow
+        run: |
+          tracecaliper inspect --suite examples/suites/python-api.yml
+          tracecaliper compare --baseline examples/traces/skill-v1.json --candidate examples/traces/skill-v2.json --output reports/comparison.json
+          tracecaliper report --comparison reports/comparison.json --output reports/skill-delta-report.md
