@@ -131,3 +131,12 @@ case study (real usage log of Missions, Droids, Review, Security Review).
 - Summary: see `docs/factory-readiness-report.md`.
 - Main value: surfaced agent-readiness gaps such as empty `AGENTS.md`, empty Factory skill file, and missing local/secret entries in `.gitignore`.
 - Customer-success insight: readiness reports are most useful when treated as prioritisation tools, not as a mandate to fix every maturity gap immediately.
+
+## Standalone security review
+
+- Factory feature used: `/security-review`
+- Outcome: Full-project audit completed.
+- Result: No security issues found.
+- Summary: see `docs/factory-security-review.md`.
+- Main value: Confirmed that TraceCaliper remained local, deterministic, offline, and free from obvious secrets, unsafe deserialization, command execution, network, database, LLM, or agent-tool risks.
+- Customer-success insight: Security review is a useful trust-building checkpoint after an agent-assisted build.

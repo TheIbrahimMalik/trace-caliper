@@ -154,3 +154,13 @@ posture, absence of LLM calls and telemetry, strong input validation via Pydanti
 no-secrets architecture make it suitable for use in security-conscious environments.  The
 primary remaining risk is the standard supply-chain risk inherent to any Python package
 using PyPI dependencies — mitigated by the minimal, well-known dependency set.
+
+---
+
+## Standalone Factory security review
+
+The standalone Factory `/security-review` was run separately after the MVP mission completed.
+
+This document records the project's security posture and threat-model reasoning. The Factory security-review result is summarised separately in:
+
+- `docs/factory-security-review.md`
