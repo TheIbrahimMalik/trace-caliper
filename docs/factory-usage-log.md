@@ -122,3 +122,12 @@ The mission produced:
 The project serves dual purpose: a portfolio artifact for a **Tessl Research Engineer**
 application (agent harness, eval methodology) and a **Factory.ai Customer Success Manager**
 case study (real usage log of Missions, Droids, Review, Security Review).
+
+## Standalone readiness report
+
+- Factory feature used: `/readiness-report`
+- Outcome: Factory produced a repo-readiness diagnostic for TraceCaliper.
+- Full report: stored in Factory app, not included in this public repo.
+- Summary: see `docs/factory-readiness-report.md`.
+- Main value: surfaced agent-readiness gaps such as empty `AGENTS.md`, empty Factory skill file, and missing local/secret entries in `.gitignore`.
+- Customer-success insight: readiness reports are most useful when treated as prioritisation tools, not as a mandate to fix every maturity gap immediately.

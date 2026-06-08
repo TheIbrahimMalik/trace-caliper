@@ -134,3 +134,13 @@ The 139 assertions in `validation-contract.md` are covered by:
   fully air-gapped environment, a local package mirror would be needed.
 - **No timestamps in artifacts:** All generated JSON and Markdown outputs contain zero
   wall-clock timestamps.  This is a deliberate design choice for reproducibility.
+
+---
+
+## Standalone Factory readiness report
+
+The standalone Factory `/readiness-report` was run separately after the MVP mission completed.
+
+This document records the mission/environment validation readiness checks. The Factory repo-maturity readiness report is summarised separately in:
+
+- `docs/factory-readiness-report.md`

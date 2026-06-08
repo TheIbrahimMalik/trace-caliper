@@ -1,0 +1,199 @@
+{
+  "comparison": {
+    "aggregate_delta": 0.24442105263157893,
+    "baseline": {
+      "dimensions": [
+        {
+          "name": "instruction_following",
+          "rationale": "3/6 step(s) within task scope; partial instruction following.",
+          "score": 0.5
+        },
+        {
+          "name": "over_editing",
+          "rationale": "12 file(s) touched vs 2 in-scope (ratio=6.00 >= 5.0); severe over-editing.",
+          "score": 0.0
+        },
+        {
+          "name": "repo_conventions",
+          "rationale": "10 out-of-scope file(s) touched (e.g., app/config/defaults.py, app/middleware/__init__.py, app/middleware/logging.py...); 2/12 within scope.",
+          "score": 0.16666666666666666
+        },
+        {
+          "name": "reviewability",
+          "rationale": "Diff is 412 LOC; partially reviewable.",
+          "score": 0.6189473684210527
+        },
+        {
+          "name": "security",
+          "rationale": "No security-suspect signals detected in any step evidence.",
+          "score": 1.0
+        },
+        {
+          "name": "task_completion",
+          "rationale": "Trace metadata reports task_completed=false; deliverable incomplete.",
+          "score": 0.0
+        },
+        {
+          "name": "tests_passed",
+          "rationale": "17/20 tests passing after execution (3 failing).",
+          "score": 0.85
+        }
+      ],
+      "trace_id": "SIMULATED \u2014 python-api skill v1 baseline trace (MVP fabricated data)",
+      "weighted_total": 0.491780701754386,
+      "weights": {
+        "instruction_following": 0.07,
+        "over_editing": 0.1,
+        "repo_conventions": 0.08,
+        "reviewability": 0.05,
+        "security": 0.2,
+        "task_completion": 0.25,
+        "tests_passed": 0.25
+      }
+    },
+    "candidate": {
+      "dimensions": [
+        {
+          "name": "instruction_following",
+          "rationale": "5/7 step(s) within task scope; partial instruction following.",
+          "score": 0.7142857142857143
+        },
+        {
+          "name": "over_editing",
+          "rationale": "6 file(s) touched vs 4 in-scope (ratio=1.50); over-editing detected.",
+          "score": 0.875
+        },
+        {
+          "name": "repo_conventions",
+          "rationale": "2 out-of-scope file(s) touched (e.g., app/config/settings.py, docs/tasks/new-endpoint.md); 4/6 within scope.",
+          "score": 0.6666666666666666
+        },
+        {
+          "name": "reviewability",
+          "rationale": "Diff is 138 LOC; partially reviewable.",
+          "score": 0.9073684210526316
+        },
+        {
+          "name": "security",
+          "rationale": "Security-suspect signal(s) detected in 1 step(s): step 6 ('hardcode_api_key').",
+          "score": 0.0
+        },
+        {
+          "name": "task_completion",
+          "rationale": "Trace metadata confirms task_completed=true.",
+          "score": 1.0
+        },
+        {
+          "name": "tests_passed",
+          "rationale": "21/21 tests passing after execution (0 failing).",
+          "score": 1.0
+        }
+      ],
+      "trace_id": "SIMULATED \u2014 python-api skill v2 candidate trace (MVP fabricated data)",
+      "weighted_total": 0.7362017543859649,
+      "weights": {
+        "instruction_following": 0.07,
+        "over_editing": 0.1,
+        "repo_conventions": 0.08,
+        "reviewability": 0.05,
+        "security": 0.2,
+        "task_completion": 0.25,
+        "tests_passed": 0.25
+      }
+    },
+    "dimension_deltas": {
+      "instruction_following": 0.2142857142857143,
+      "over_editing": 0.875,
+      "repo_conventions": 0.5,
+      "reviewability": 0.2884210526315789,
+      "security": -1.0,
+      "task_completion": 1.0,
+      "tests_passed": 0.15000000000000002
+    },
+    "introduced": [
+      "SECURITY_FLAG"
+    ],
+    "persistent": [],
+    "resolved": [
+      "INCOMPLETE_TASK",
+      "INSTRUCTION_DRIFT",
+      "LOW_REVIEWABILITY",
+      "OVER_EDITING",
+      "TEST_REGRESSION"
+    ]
+  },
+  "deltas": {
+    "aggregate": 0.24442105263157893,
+    "dimensions": {
+      "instruction_following": 0.2142857142857143,
+      "over_editing": 0.875,
+      "repo_conventions": 0.5,
+      "reviewability": 0.2884210526315789,
+      "security": -1.0,
+      "task_completion": 1.0,
+      "tests_passed": 0.15000000000000002
+    }
+  },
+  "failure_mode_details": {
+    "introduced": [
+      {
+        "code": "SECURITY_FLAG",
+        "evidence": "Security-suspect signal(s) found in 1 step(s): step 6 ('hardcode_api_key'): matched 'hardcoded'.",
+        "severity": "critical"
+      }
+    ],
+    "persistent": [],
+    "resolved": [
+      {
+        "code": "INCOMPLETE_TASK",
+        "evidence": "Trace metadata reports task_completed=false; the final deliverable was not produced as required by the skill.",
+        "severity": "high"
+      },
+      {
+        "code": "INSTRUCTION_DRIFT",
+        "evidence": "Instruction-drift signal(s) found in 2 step(s): step 4 ('edit_unrelated_helpers'): 'unrelated'; step 5 ('edit_serializers'): 'not required by'.",
+        "severity": "medium"
+      },
+      {
+        "code": "LOW_REVIEWABILITY",
+        "evidence": "Diff size is 412 LOC, exceeding the reviewability threshold of 200 LOC. Large diffs are difficult to review effectively.",
+        "severity": "low"
+      },
+      {
+        "code": "OVER_EDITING",
+        "evidence": "12 unique file(s) touched across all steps, exceeding the threshold of 8. Files include: app/config/defaults.py, app/handlers/items.py, app/middleware/__init__.py, app/middleware/logging.py, app/router.py....",
+        "severity": "medium"
+      },
+      {
+        "code": "TEST_REGRESSION",
+        "evidence": "Test regression detected: failing tests increased from 2 to 3 (+1 newly failing). Failing tests: tests/test_items.py::test_get_item, tests/test_items.py::test_list_items, tests/test_serializers.py::test_item_serializer.",
+        "severity": "high"
+      }
+    ]
+  },
+  "failure_modes": {
+    "introduced": [
+      "SECURITY_FLAG"
+    ],
+    "persistent": [],
+    "resolved": [
+      "INCOMPLETE_TASK",
+      "INSTRUCTION_DRIFT",
+      "LOW_REVIEWABILITY",
+      "OVER_EDITING",
+      "TEST_REGRESSION"
+    ]
+  },
+  "gate": {
+    "decision": "HOLD",
+    "rationale": [
+      "SECURITY_FLAG was introduced in the candidate \u2014 a new critical security issue requires immediate attention.",
+      "Failure mode(s) resolved in candidate: INCOMPLETE_TASK, INSTRUCTION_DRIFT, LOW_REVIEWABILITY, OVER_EDITING, TEST_REGRESSION; but the new SECURITY_FLAG still blocks PASS.",
+      "Aggregate delta is positive (+0.244421), reflecting partial score improvement."
+    ]
+  },
+  "suite_metadata": {
+    "description": "Default TraceCaliper evaluation suite (applies documented default dimension weights).",
+    "name": "default"
+  }
+}
